@@ -17,6 +17,12 @@ body {
   margin: 0;
   min-width: 320px;
   background: var(--page-gradient);
+  -ms-overflow-style: none;
+  scrollbar-width: none;
+}
+
+body::-webkit-scrollbar {
+  display: none;
 }
 
 .case-shell {

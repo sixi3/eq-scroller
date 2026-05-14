@@ -1,4 +1,9 @@
 import {
+  KeyboardArrowDownRounded,
+  KeyboardArrowUpRounded,
+} from "@mui/icons-material";
+
+import {
   type CSSProperties,
   type HTMLAttributes,
   type ReactNode,
@@ -416,9 +421,28 @@ export function ScrollSections({
                   </span>
                   <h2 className="eq-scroll-section__title">{section.title}</h2>
                 </div>
-                {section.eyebrow ? (
-                  <div className="eq-scroll-section__eyebrow">{section.eyebrow}</div>
-                ) : null}
+                <div className="eq-scroll-section__headerMeta">
+                  <div className="eq-scroll-section__headerNav" aria-label={`Navigate ${section.id} section`}>
+                    <button
+                      aria-label="Go to previous section"
+                      className="eq-scroll-section__chevron"
+                      disabled={index === 0}
+                      onClick={() => scrollToSection(index - 1)}
+                      type="button"
+                    >
+                      <KeyboardArrowUpRounded fontSize="small" />
+                    </button>
+                    <button
+                      aria-label="Go to next section"
+                      className="eq-scroll-section__chevron"
+                      disabled={index === sections.length - 1}
+                      onClick={() => scrollToSection(index + 1)}
+                      type="button"
+                    >
+                      <KeyboardArrowDownRounded fontSize="small" />
+                    </button>
+                  </div>
+                </div>
               </div>
             </header>
 
