@@ -1,7 +1,5 @@
-import {
-  KeyboardArrowDownRounded,
-  KeyboardArrowUpRounded,
-} from "@mui/icons-material";
+import KeyboardArrowDownRounded from "@mui/icons-material/KeyboardArrowDownRounded";
+import KeyboardArrowUpRounded from "@mui/icons-material/KeyboardArrowUpRounded";
 
 import {
   type CSSProperties,
@@ -36,6 +34,15 @@ type SectionMetrics = {
   fullHeight: number;
   gapAfter: number;
   headerHeight: number;
+};
+
+type SectionStyleSnapshot = {
+  progress: string;
+  viewportProgress: string;
+  visibleHeight: string;
+  visibleBodyHeight: string;
+  visibleGap: string;
+  exitOffset: string;
 };
 
 const clamp01 = (value: number) => Math.min(1, Math.max(0, value));
@@ -119,6 +126,11 @@ export function ScrollSections({
   const headerRefs = useRef<Array<HTMLElement | null>>([]);
   const bodyInnerRefs = useRef<Array<HTMLDivElement | null>>([]);
   const metricsRef = useRef<SectionMetrics[]>([]);
+  const sectionStyleSnapshotRef = useRef<Array<SectionStyleSnapshot | undefined>>([]);
+  const sectionGapRef = useRef(0);
+  const stickyViewportHeightRef = useRef(0);
+  const visualTravelLimitRef = useRef(0);
+  const rootDocumentTopRef = useRef(0);
   const frameRef = useRef<number | null>(null);
   const activeIndexRef = useRef(0);
   const [activeIndex, setActiveIndex] = useState(0);
@@ -141,6 +153,9 @@ export function ScrollSections({
     const sectionGap = root
       ? Number.parseFloat(getComputedStyle(root).getPropertyValue("--section-gap")) || 0
       : 0;
+    sectionGapRef.current = sectionGap;
+    stickyViewportHeightRef.current = Math.max(0, window.innerHeight - stickyTop);
+    rootDocumentTopRef.current = root ? root.getBoundingClientRect().top + window.scrollY : 0;
 
     metricsRef.current = sectionRefs.current.map((section, index) => {
       const header = headerRefs.current[index];
@@ -159,16 +174,16 @@ export function ScrollSections({
       };
     });
 
-    const stickyViewportHeight = Math.max(0, window.innerHeight - stickyTop);
     const visualTravelLimit = getVisualTravelLimit(
       metricsRef.current,
-      stickyViewportHeight,
+      stickyViewportHeightRef.current,
       sectionGap,
     );
+    visualTravelLimitRef.current = visualTravelLimit;
     const activationTail = getActivationTail(metricsRef.current, visualTravelLimit, sectionGap);
     const nextVirtualScrollHeight = Math.max(
       window.innerHeight,
-      visualTravelLimit + stickyViewportHeight + activationTail.height,
+      visualTravelLimit + stickyViewportHeightRef.current + activationTail.height,
     );
 
     setVirtualScrollHeight((currentVirtualScrollHeight) =>
@@ -182,18 +197,9 @@ export function ScrollSections({
   const updateProgress = useCallback(() => {
     frameRef.current = null;
 
-    const root = rootRef.current;
-    const sectionGap = root
-      ? Number.parseFloat(getComputedStyle(root).getPropertyValue("--section-gap")) || 0
-      : 0;
-    const stickyViewportHeight = Math.max(0, window.innerHeight - stickyTop);
-    const visualTravelLimit = getVisualTravelLimit(
-      metricsRef.current,
-      stickyViewportHeight,
-      sectionGap,
-    );
-    const rootTop = root ? root.getBoundingClientRect().top + window.scrollY : 0;
-    const rawRemainingScroll = Math.max(0, window.scrollY + stickyTop - rootTop);
+    const sectionGap = sectionGapRef.current;
+    const visualTravelLimit = visualTravelLimitRef.current;
+    const rawRemainingScroll = Math.max(0, window.scrollY + stickyTop - rootDocumentTopRef.current);
     const activationTailScroll = Math.max(0, rawRemainingScroll - visualTravelLimit);
     let remainingScroll = Math.min(rawRemainingScroll, visualTravelLimit);
     let nextActiveIndex = 0;
@@ -230,12 +236,41 @@ export function ScrollSections({
       const progress = clamp01(consumedScroll / bodyCollapseDistance);
       const viewportProgress = clamp01((index + progress) / Math.max(1, sections.length - 1));
 
-      section.style.setProperty("--section-progress", progress.toFixed(4));
-      section.style.setProperty("--section-viewport-progress", viewportProgress.toFixed(4));
-      section.style.setProperty("--section-visible-height", `${visibleHeight}px`);
-      section.style.setProperty("--section-visible-body-height", `${visibleBodyHeight}px`);
-      section.style.setProperty("--section-visible-gap", `${visibleGap}px`);
-      section.style.setProperty("--section-exit-offset", `${exitOffset}px`);
+      const nextStyleSnapshot: SectionStyleSnapshot = {
+        progress: progress.toFixed(4),
+        viewportProgress: viewportProgress.toFixed(4),
+        visibleHeight: `${visibleHeight}px`,
+        visibleBodyHeight: `${visibleBodyHeight}px`,
+        visibleGap: `${visibleGap}px`,
+        exitOffset: `${exitOffset}px`,
+      };
+      const previousStyleSnapshot = sectionStyleSnapshotRef.current[index];
+
+      if (!previousStyleSnapshot || previousStyleSnapshot.progress !== nextStyleSnapshot.progress) {
+        section.style.setProperty("--section-progress", nextStyleSnapshot.progress);
+      }
+      if (
+        !previousStyleSnapshot ||
+        previousStyleSnapshot.viewportProgress !== nextStyleSnapshot.viewportProgress
+      ) {
+        section.style.setProperty("--section-viewport-progress", nextStyleSnapshot.viewportProgress);
+      }
+      if (!previousStyleSnapshot || previousStyleSnapshot.visibleHeight !== nextStyleSnapshot.visibleHeight) {
+        section.style.setProperty("--section-visible-height", nextStyleSnapshot.visibleHeight);
+      }
+      if (
+        !previousStyleSnapshot ||
+        previousStyleSnapshot.visibleBodyHeight !== nextStyleSnapshot.visibleBodyHeight
+      ) {
+        section.style.setProperty("--section-visible-body-height", nextStyleSnapshot.visibleBodyHeight);
+      }
+      if (!previousStyleSnapshot || previousStyleSnapshot.visibleGap !== nextStyleSnapshot.visibleGap) {
+        section.style.setProperty("--section-visible-gap", nextStyleSnapshot.visibleGap);
+      }
+      if (!previousStyleSnapshot || previousStyleSnapshot.exitOffset !== nextStyleSnapshot.exitOffset) {
+        section.style.setProperty("--section-exit-offset", nextStyleSnapshot.exitOffset);
+      }
+      sectionStyleSnapshotRef.current[index] = nextStyleSnapshot;
 
       const activeUntil = bodyHeight + metrics.headerHeight * 0.5;
       if (!foundActiveSection && (isLastSection || consumedScroll < activeUntil)) {
@@ -324,19 +359,10 @@ export function ScrollSections({
       }
 
       const prefersReducedMotion = window.matchMedia("(prefers-reduced-motion: reduce)").matches;
-      const root = rootRef.current;
-      const sectionGap = root
-        ? Number.parseFloat(getComputedStyle(root).getPropertyValue("--section-gap")) || 0
-        : 0;
-      const stickyViewportHeight = Math.max(0, window.innerHeight - stickyTop);
-      const visualTravelLimit = getVisualTravelLimit(
-        metricsRef.current,
-        stickyViewportHeight,
-        sectionGap,
-      );
+      const sectionGap = sectionGapRef.current;
+      const visualTravelLimit = visualTravelLimitRef.current;
       const activationTail = getActivationTail(metricsRef.current, visualTravelLimit, sectionGap);
       const activationTailIndex = activationTail.indexes.indexOf(index);
-      const rootTop = root ? root.getBoundingClientRect().top + window.scrollY : 0;
       const targetTravel =
         activationTailIndex === -1
           ? Math.min(
@@ -350,7 +376,7 @@ export function ScrollSections({
                 ),
             )
           : visualTravelLimit + activationTail.step * activationTailIndex + 1;
-      const targetTop = rootTop - stickyTop + targetTravel;
+      const targetTop = rootDocumentTopRef.current - stickyTop + targetTravel;
       const maxScrollTop = Math.max(0, document.documentElement.scrollHeight - window.innerHeight);
       const top = Math.min(targetTop, maxScrollTop);
 
